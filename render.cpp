@@ -17,6 +17,9 @@
 #include <stdlib.h>
 #include <cmath>
 
+#include <chrono>
+#include <thread>
+
 //NE10's implementation STUFF
 #include <libraries/ne10/NE10.h>
 ne10_fft_cpx_float32_t* timeDomainIn;
@@ -27,23 +30,26 @@ bool TESTING_NE10 = false;
 //My include files.
 #include <fft_jz.h> //fft_jz includes complex_jz.h so we have access to complex numbers in this file too.
 #include <filter_jz.h>
+#include <complex_jz.h>
 
 // GUI object declaration
 Gui gui;
 
 // Determines the size of the FFT processed.
-int gFFTSize = 8192;
+int gFFTSize = 32768;
 // Determines how long we should wait between processing FFTs.
-int gHopSize = gFFTSize/4;
+int gHopSize = gFFTSize/10;
 //How often we send to the GUI. (Every SEND_WAIT_TIME FFTs)
 int SEND_WAIT_TIME=1;
 int sendCounter=0;
 
 
 // Input circular buffer. Make sure this is bigger than FFT size.
-#define BUFFER_SIZE 65536
+#define BUFFER_SIZE 35000
 float gFftInputBuffer[BUFFER_SIZE] = {0};
 int gFftInputBufferPointer = 0;
+
+MyFFT *fftObject;
 
 // Output frequency linear Buffer
 float *gFftOutputBuffer;
@@ -61,8 +67,9 @@ int gNumberOfFftsCurrentlyProcessing=0;
 
 
 // Sample info
-string gFilename = "Chopin.wav"; // Name of the sound file (in project folder)
-// string gFilename = "dubstep.wav";
+// string gFilename = "Chopin.wav"; // Name of the sound file (in project folder)
+string gFilename = "dubstep.wav";
+// string gFilename = "2000hz.wav";
 // string gFilename = "DrumBeat.wav";
 float *gSampleBuffer;			 // Buffer that holds the sound file
 int gSampleBufferLength;		 // The length of the buffer in frames
@@ -81,102 +88,6 @@ float gains[3] = {1};
 
 bool setup(BelaContext *context, void *userData)
 {
-	//----------------------//
-	// Testing Bit Reversal // (method declaration located in fft_jz.h)
-	//----------------------//
-	// First argument is the integer to reverse. Second argument is the number of bits to reverse.
-	// E.g. bitReversal(19, 5) would reverse the bits of (10011) -> (11001) = 25
-	// unsigned int expectedAns = 25;
-	// unsigned int ans = bitReversal(19, 5);
-	// if (ans != expectedAns) {
-	// 	rt_printf("\n!!!!!!!!!!!!!!!!!!!!!!BIT REVERSAL NOT WORKING!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-	// 	rt_printf("Bit reversal answer: %u", ans);
-	// } else {
-	// 	rt_printf("Bit reversal answer test: %u. Looks good.\n", ans);
-	// }
-	
-	//----------------------------//
-	// Testing Complex Arithmetic //
-	//----------------------------//
-	// Complex a, b, c, d, e, f, g;
-	// a.re = 0.5;
-	// a.im = 1;
-	// b.re = 3;
-	// b.im = 4;
-	// Complex add_asm_test;
-	// complexAdd_asm(&a, &b, &add_asm_test);
-	// //rt_printf("(%.3f+j%.3f) + (%.3f+j%.3f) = %.3f+j%.3f\n", a.re, a.im, b.re, b.im, add_asm_test.re, add_asm_test.im);
-	// Complex subtract_asm_test;
-	// complexSubtract_asm(&a, &b, &subtract_asm_test);
-	// //rt_printf("(%.3f+j%.3f) - (%.3f+j%.3f) = %.3f+j%.3f\n", a.re, a.im, b.re, b.im, subtract_asm_test.re, subtract_asm_test.im);
-	
-	// c = complexMultiply(a,b);
-	// Complex multiply_asm_test;
-	// complexMultiply_asm(&a, &b, &multiply_asm_test);
-	// //rt_printf("(%.3f+j%.3f) * (%.3f+j%.3f) = %.3f+j%.3f\n", a.re, a.im, b.re, b.im, multiply_asm_test.re, multiply_asm_test.im);
-	// d = calculateNegativeComplex(c);
-	// //rt_printf("-(%.3f + j%.3f) = (%.3f + j%.3f)\n", c.re, c.im, d.re, d.im);
-	// e = complexSubtract(a, b);
-	// //rt_printf("(%.3f+j%.3f) - (%.3f+j%.3f) = %.3f+j%.3f\n", a.re, a.im, b.re, b.im, e.re, e.im);
-	// int stage = 2;
-	// f = calculateTwiddleRotationFactor(stage);
-	// //rt_printf("Twiddle at stage %d: (%.3f+j%.3f)\n", stage, f.re, f.im);
-	
-	//---------------------//
-	// Testing a Butterfly //
-	//---------------------//
-	// Complex test_a[2];
-	// Complex test_b[2];
-	// f.re = 0; f.im = 1;
-	// Complex test_twiddle = f;
-	// a.re = 0.7; a.im=0;
-	// b.re = -0.3; b.im = 0.1;
-	// test_a[0] = a;
-	// test_a[1] = b;
-	// //rt_printf("Butterfly inputs: {(%.3f+j%.3f),(%.3f+j%.3f)}  Twiddle:(%.3f+j%.3f)\n", test_a[0].re, test_a[0].im, test_a[1].re, test_a[1].im, test_twiddle.re, test_twiddle.im);
-	// butterfly(&test_a[0], 0, &test_b[0], test_twiddle);
-	// //rt_printf("Butterfly outputs: {(%.3f+j%.3f),(%.3f+j%.3f)}\n", test_b[0].re, test_b[0].im, test_b[1].re, test_b[1].im);
-	
-	// Complex *butterflyInputs;
-	// butterflyInputs = new Complex[2];
-	// butterflyInputs[0] = a; butterflyInputs[1] = b;
-	// Complex *butterflyOutputs;
-	// butterflyOutputs = new Complex[2];
-	// butterfly_asm(butterflyInputs, butterflyOutputs, &test_twiddle);
-	// //rt_printf("Butterfly outputs: {(%.3f+j%.3f),(%.3f+j%.3f)}\n", butterflyOutputs[0].re, butterflyOutputs[0].im, butterflyOutputs[1].re, butterflyOutputs[1].im);
-	
-	// delete[] butterflyInputs;
-	// delete[] butterflyOutputs;
-	
-	//-------------------------//
-	// Testing De-Interleaving //
-	//-------------------------//
-	// Complex test_interleaved[4];
-	// a.re = 1; a.im = 1; b.re=2; b.im=2; c.re=3;c.im=3; d.re=4; d.im=4;
-	// test_interleaved[0]=a;test_interleaved[1]=b;test_interleaved[2]=c;test_interleaved[3]=d;
-	// Complex test_deinterleaved[4];
-	// de_interleave(test_interleaved, test_deinterleaved, 4);
-	// //rt_printf("De_interleaved: (%.3f+j%.3f), (%.3f+j%.3f), (%.3f+j%.3f), (%.3f+j%.3f)\n", test_deinterleaved[0].re, test_deinterleaved[0].im, test_deinterleaved[1].re, test_deinterleaved[1].im,
-	// //test_deinterleaved[2].re,test_deinterleaved[2].im, test_deinterleaved[3].re, test_deinterleaved[3].im);
-	
-	//----------------//
-	// Testing an FFT //
-	//----------------//
-	// float gFFTSizeBeforeTest = gFFTSize;
-	// gFFTSize = 16;
-	// #define test_fft_size 16
-	// int test_fft_log2n = 4;
-	// // float test_input[test_fft_size] = {1, 0.2, -0.3, -0.5};
-	// float test_input[test_fft_size] = {1, 0.2, -0.3, -0.5, 0.1, 0.9, -0.9, 0.1, 0.5, 0.3, -0.3, -0.5, 0.2, -0.9, -0.2, 0.14};
-	// float test_output[test_fft_size];
-	// //test_input[0] = 1; test_input[1] = 0.2; test_input[2] = -0.3; test_input[3] = -0.5; test_input[4] = 0.5; test_input[5] = 0.9; test_input[6] = -0.1;  test_input[7] = 0.01;
-	// my_fft(test_input, test_fft_size, test_fft_log2n, test_output);
-	// // rt_printf("Frequency Bins: {%.3f}, {%.3f}, {%.3f}, {%.3f}\n", test_output[0], test_output[1], test_output[2], test_output[3]);
-	// rt_printf("Test FFT Frequency Bins: {%.3f}, {%.3f}, {%.3f}, {%.3f}, {%.3f}, {%.3f}, {%.3f}, {%.3f}, {%.3f}, {%.3f}, {%.3f}, {%.3f}, {%.3f}, {%.3f}, {%.3f}, {%.3f}\n",
-	// test_output[0], test_output[1], test_output[2], test_output[3], test_output[4], test_output[5], test_output[6], test_output[7],
-	// test_output[8], test_output[9], test_output[10], test_output[11], test_output[12], test_output[13], test_output[14], test_output[15]);
-	// gFFTSize = gFFTSizeBeforeTest;
-	
 	//--------------------//
 	// Setup Filter state //
 	//--------------------//
@@ -242,6 +153,10 @@ bool setup(BelaContext *context, void *userData)
 		gWindowBuffer[n] = 0.5f * (1.0f - cosf(2.0 * M_PI * n / (float)(gFFTSize - 1)));
 	}
 	
+	// Create the FFT object.
+	fftObject = new MyFFT(gFFTSize);
+	fftObject->setmFftType(Cpp); //Options are Cpp, Asm, AsmNeon
+	
 	// Set up the thread for the FFT
 	gFFTTask = Bela_createAuxiliaryTask(process_fft_background, 75, "bela-process-fft");
 	
@@ -262,6 +177,7 @@ bool setup(BelaContext *context, void *userData)
 	timeDomainIn = (ne10_fft_cpx_float32_t*) NE10_MALLOC (gFFTSize * sizeof (ne10_fft_cpx_float32_t));
 	frequencyDomain = (ne10_fft_cpx_float32_t*) NE10_MALLOC (gFFTSize * sizeof (ne10_fft_cpx_float32_t));
 	cfg = ne10_fft_alloc_c2c_float32_neon (gFFTSize);
+	rt_printf("Looking good for setup\n");
     	
 	return true;
 }
@@ -285,7 +201,8 @@ void process_fft(float *inBuffer, int inWritePointer)
 	}
 
 	// Run the FFT
-	my_fft(fftInput, gFFTSize, log2(gFFTSize), gFftOutputBuffer);
+	// rt_printf("Calculating an FFT!\n");
+	fftObject->processFft(fftInput, gFftOutputBuffer);
 	
 }
 
@@ -316,9 +233,7 @@ void process_fft_ne10(float *inBuffer, int inWritePointer) {
 // This function runs in an auxiliary task on Bela, calling process_fft
 void process_fft_background(void *)
 {
-	// rt_printf("In the background thread now\n");
 	if (TESTING_NE10) {
-		// rt_printf("Process ne10 fft!\n");
 		process_fft_ne10(gFftInputBuffer, gCachedFftInputBufferPointer);
 	} else {
 		process_fft(gFftInputBuffer, gCachedFftInputBufferPointer);
@@ -378,7 +293,6 @@ void render(BelaContext *context, void *userData)
 		//------------------------------//
 		float out = in;
 		
-		
 		if (filtersOn) {
 			//Filter into different bands
 			float outLows = LowsLowPass_0.processNew(in);
@@ -402,7 +316,6 @@ void render(BelaContext *context, void *userData)
 			
 			//Then apply gains to each band separately. Using a log scaling so it's perceptually nice.
 			out =  pow(10.0,(60.0*(gains[0]-1))/20.0)*outLows + pow(10.0,(60.0*(gains[1]-1))/20.0)*outMids + pow(10.0,(60.0*(gains[2]-1))/20.0)*outHighs;
-			
 		}
 		//Noise generator. Just an idea for an extra GUI component.
 		//out += 0.03 * ((float)rand())/((float)RAND_MAX);
@@ -411,10 +324,10 @@ void render(BelaContext *context, void *userData)
 		// Stop audio processing here //
 		//----------------------------//
         
+        
         //---------------------------------//
         // FFT processing code starts here //
 		//---------------------------------//
-		
 		// Store the input in the input circular buffer
 		gFftInputBuffer[gFftInputBufferPointer] = out;
 		gFftInputBufferPointer++;
@@ -440,7 +353,8 @@ void render(BelaContext *context, void *userData)
         // FFT processing code ends here //
 		//-------------------------------//
 		
-		// Play the output sound.
+		
+		// Play the output sound (mono).
 		for(unsigned int channel = 0; channel < context->audioOutChannels; channel++) {
 			audioWrite(context, n, channel, out);
 		}
@@ -454,4 +368,5 @@ void cleanup(BelaContext *context, void *userData)
     delete[] gSampleBuffer;
     delete[] gWindowBuffer;
     delete[] gFftOutputBuffer;
+    delete[] fftObject;
 }

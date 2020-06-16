@@ -5,12 +5,17 @@
  * Would probably be nicer as an object with overloaded operators. Oh well.
  */
 
+#ifndef STRUCT
+#define STRUCT
+
 /**
  * Complex Number struct
  */
 struct Complex {
-	float re=1, im=0;
+	float re = 1, im = 0;
 };
+
+#endif
 
 /* Assembly-language Complex add function */
 extern "C" {
@@ -23,39 +28,19 @@ extern "C" {
 /**
  * complexMultiply - Multiply two complex numbers
  */
-Complex complexMultiply(Complex a, Complex b) {
-	Complex c;
-	c.re = (a.re*b.re) - (a.im*b.im);
-	c.im = (a.re*b.im) + (a.im*b.re);
-	return c;
-}
+Complex complexMultiply(Complex a, Complex b);
 
 /**
  * complexAdd - Add two complex numbers
  */
-Complex complexAdd(Complex a, Complex b) {
-	Complex c;
-	c.re = a.re + b.re;
-	c.im = a.im + b.im;
-	return c;
-}
+Complex complexAdd(Complex a, Complex b);
 
 /**
  * complexSubtract - Subtract a complex number (b) from another (a)
  */
-Complex complexSubtract(Complex a, Complex b) {
-	Complex c;
-	c.re = a.re-b.re;
-	c.im = a.im-b.im;
-	return c;
-}
+Complex complexSubtract(Complex a, Complex b);
 
 /**
  * calculateNegativeComplex - Finds the negative of a complex number struct
  */
-Complex calculateNegativeComplex(Complex a) {
-	Complex b;
-	b.re = -a.re;
-	b.im = -a.im;
-	return b;
-}
+Complex calculateNegativeComplex(Complex a);
